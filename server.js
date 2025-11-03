@@ -1,14 +1,14 @@
 /**
- * 🌍 Server.js — Render-Ready Express + Mongoose Backend
+ * 🌍 Server.js — Render-Ready Express + Mongoose Backend (Vercel + Localhost)
  */
 
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/database');
-require('dotenv').config();
 
 const app = express();
 
@@ -21,9 +21,23 @@ app.use(
   })
 );
 
+// ✅ Allow both Vercel and Localhost frontends
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://ecole-saint-pierre-claver.vercel.app',
+  process.env.FRONTEND_URL, // fallback if set in env
+];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || '*',
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   })
 );
@@ -95,6 +109,14 @@ app.get('/api/health', (req, res) => {
 app.use((err, req, res, next) => {
   console.error('🔥 Error stack:', err.stack);
 
+  // CORS error
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      success: false,
+      message: 'CORS error: Origin not allowed',
+    });
+  }
+
   // Validation Error
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map((error) => error.message);
@@ -160,7 +182,10 @@ app.listen(PORT, () => {
 ---------------------------------------------------
 ✅ Server running on port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
-🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}
+🔗 Allowed Origins:
+   - http://localhost:3000
+   - https://ecole-saint-pierre-claver.vercel.app
+   - ${process.env.FRONTEND_URL || '(none)'}
 📦 Database URI: ${
     process.env.MONGODB_URI
       ? process.env.MONGODB_URI.replace(/\/\/.*@/, '//<hidden>@')
