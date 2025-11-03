@@ -26,19 +26,39 @@ const allowedOrigins = [
   'http://localhost:3000',
   'https://ecole-saint-pierre-claver.vercel.app',
   process.env.FRONTEND_URL, // fallback if set in env
-];
+].filter(Boolean); // Remove any undefined values
 
+// ======================
+// 🔧 FIXED CORS Configuration
+// ======================
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl)
+      // Allow requests with no origin (like mobile apps, postman, server-side requests)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.some(allowedOrigin => 
+        origin === allowedOrigin || 
+        origin.startsWith(allowedOrigin.replace('https://', 'http://'))
+      )) {
+        return callback(null, true);
+      }
+      
+      // For development, you might want to be more permissive
+      if (process.env.NODE_ENV === 'development') {
+        console.log('CORS warning: Allowing origin in development:', origin);
+        return callback(null, true);
+      }
+      
+      console.log('CORS blocked for origin:', origin);
       return callback(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
   })
 );
 
@@ -99,6 +119,7 @@ app.get('/api/health', (req, res) => {
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
       uptime: process.uptime(),
+      allowedOrigins: allowedOrigins
     },
   });
 });
@@ -109,11 +130,14 @@ app.get('/api/health', (req, res) => {
 app.use((err, req, res, next) => {
   console.error('🔥 Error stack:', err.stack);
 
-  // CORS error
+  // CORS error - don't send full error details in production
   if (err.message === 'Not allowed by CORS') {
     return res.status(403).json({
       success: false,
       message: 'CORS error: Origin not allowed',
+      ...(process.env.NODE_ENV === 'development' && { 
+        details: `Origin: ${req.get('Origin')}` 
+      })
     });
   }
 
