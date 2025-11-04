@@ -1,5 +1,5 @@
 /**
- * 🌍 Server.js — Configured for ecolestpierre.org domain
+ * 🌍 Server.js — Configured for all frontend URLs
  */
 
 require('dotenv').config();
@@ -22,17 +22,19 @@ app.use(
   })
 );
 
-// ✅ Updated CORS for ecolestpierre.org domain
+// ✅ ALLOW ALL FRONTEND URLs
 const allowedOrigins = [
-  'http://localhost:3000',
-  'https://ecolestpierre.org',
-  'https://www.ecolestpierre.org',
-  'https://ecole-saint-pierre-claver.vercel.app',
-  process.env.FRONTEND_URL,
-].filter(Boolean);
+  'http://localhost:3000',                    // Local development
+  'https://ecole-saint-pierre-claver.vercel.app', // Vercel deployment
+  'https://ecolestpierre.org',               // Your main domain
+  'https://www.ecolestpierre.org',           // WWW subdomain
+  'http://localhost:5173',                   // Vite dev server
+  'http://127.0.0.1:3000',                   // Alternative localhost
+  'http://127.0.0.1:5173'                    // Alternative Vite
+];
 
 // ======================
-// 🔧 UPDATED CORS Configuration for Domain
+// 🔧 CORS Configuration for All URLs
 // ======================
 app.use(
   cors({
@@ -44,10 +46,17 @@ app.use(
       if (allowedOrigins.some(allowedOrigin => {
         // Exact match
         if (origin === allowedOrigin) return true;
-        // Development localhost variations
+        
+        // Localhost variations
         if (origin.startsWith('http://localhost:')) return true;
-        // Subdomain variations
+        if (origin.startsWith('http://127.0.0.1:')) return true;
+        
+        // Subdomain variations for your domain
         if (allowedOrigin.includes('ecolestpierre.org') && origin.includes('ecolestpierre.org')) return true;
+        
+        // Vercel preview deployments
+        if (origin.includes('vercel.app')) return true;
+        
         return false;
       })) {
         return callback(null, true);
@@ -60,10 +69,11 @@ app.use(
       }
       
       console.log('CORS blocked for origin:', origin);
+      console.log('Allowed origins:', allowedOrigins);
       return callback(new Error('Not allowed by CORS'));
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
     credentials: true,
     preflightContinue: false,
     optionsSuccessStatus: 204
@@ -90,7 +100,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ======================
-// 🖼️ Static Files - UPDATED for subdirectory deployment
+// 🖼️ Static Files
 // ======================
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -100,7 +110,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 connectDB();
 
 // ======================
-// 🚀 Routes - UPDATED for subdirectory deployment
+// 🚀 Routes
 // ======================
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
@@ -108,16 +118,17 @@ app.use('/api/messages', require('./routes/messages'));
 app.use('/api/applications', require('./routes/applications'));
 app.use('/api/upload', require('./routes/uploads'));
 
-// ✅ Root Test Route - UPDATED for domain
+// ✅ Root Test Route
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
-    message: '✅ API is running successfully on ecolestpierre.org!',
+    message: '✅ API is running successfully!',
     data: {
       domain: 'ecolestpierre.org',
       environment: process.env.NODE_ENV || 'development',
       timestamp: new Date().toISOString(),
-      version: '1.0.0'
+      version: '1.0.0',
+      allowedOrigins: allowedOrigins
     }
   });
 });
@@ -135,18 +146,19 @@ app.get('/api', (req, res) => {
       upload: '/api/upload',
       health: '/api/health'
     },
+    frontendUrls: allowedOrigins,
     documentation: 'https://ecolestpierre.org/api/docs'
   });
 });
 
-// 🩺 Health Check - UPDATED for domain
+// 🩺 Health Check
 app.get('/api/health', (req, res) => {
   const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
 
   res.status(200).json({
     success: true,
     status: 'OK',
-    message: 'Server is running on ecolestpierre.org',
+    message: 'Server is running',
     data: {
       domain: 'ecolestpierre.org',
       database: dbStatus,
@@ -249,12 +261,12 @@ app.listen(PORT, '0.0.0.0', () => {
 ✅ Server running on port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
 🏠 Domain: ecolestpierre.org
-🔗 Allowed Origins:
-   - https://ecolestpierre.org
-   - https://www.ecolestpierre.org
+🔗 Allowed Frontend URLs:
    - http://localhost:3000
    - https://ecole-saint-pierre-claver.vercel.app
-   - ${process.env.FRONTEND_URL || '(none)'}
+   - https://ecolestpierre.org
+   - https://www.ecolestpierre.org
+   - http://localhost:5173
 📦 Database: ${process.env.MONGODB_URI ? 'MongoDB Atlas' : 'Local MongoDB'}
 ---------------------------------------------------
   `);
