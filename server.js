@@ -1,5 +1,5 @@
 /**
- * 🌍 Server.js — Render-Ready Express + Mongoose Backend (Vercel + Localhost)
+ * 🌍 Server.js — Configured for ecolestpierre.org domain
  */
 
 require('dotenv').config();
@@ -9,6 +9,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/database');
+const path = require('path');
 
 const app = express();
 
@@ -21,15 +22,17 @@ app.use(
   })
 );
 
-// ✅ Allow both Vercel and Localhost frontends
+// ✅ Updated CORS for ecolestpierre.org domain
 const allowedOrigins = [
   'http://localhost:3000',
+  'https://ecolestpierre.org',
+  'https://www.ecolestpierre.org',
   'https://ecole-saint-pierre-claver.vercel.app',
-  process.env.FRONTEND_URL, // fallback if set in env
-].filter(Boolean); // Remove any undefined values
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
 // ======================
-// 🔧 FIXED CORS Configuration
+// 🔧 UPDATED CORS Configuration for Domain
 // ======================
 app.use(
   cors({
@@ -38,14 +41,19 @@ app.use(
       if (!origin) return callback(null, true);
       
       // Check if origin is in allowed list
-      if (allowedOrigins.some(allowedOrigin => 
-        origin === allowedOrigin || 
-        origin.startsWith(allowedOrigin.replace('https://', 'http://'))
-      )) {
+      if (allowedOrigins.some(allowedOrigin => {
+        // Exact match
+        if (origin === allowedOrigin) return true;
+        // Development localhost variations
+        if (origin.startsWith('http://localhost:')) return true;
+        // Subdomain variations
+        if (allowedOrigin.includes('ecolestpierre.org') && origin.includes('ecolestpierre.org')) return true;
+        return false;
+      })) {
         return callback(null, true);
       }
       
-      // For development, you might want to be more permissive
+      // For development, be more permissive
       if (process.env.NODE_ENV === 'development') {
         console.log('CORS warning: Allowing origin in development:', origin);
         return callback(null, true);
@@ -82,9 +90,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ======================
-// 🖼️ Static Files
+// 🖼️ Static Files - UPDATED for subdirectory deployment
 // ======================
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ======================
 // 🔗 Connect Database
@@ -92,7 +100,7 @@ app.use('/uploads', express.static('uploads'));
 connectDB();
 
 // ======================
-// 🚀 Routes
+// 🚀 Routes - UPDATED for subdirectory deployment
 // ======================
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
@@ -100,25 +108,52 @@ app.use('/api/messages', require('./routes/messages'));
 app.use('/api/applications', require('./routes/applications'));
 app.use('/api/upload', require('./routes/uploads'));
 
-// ✅ Root Test Route
+// ✅ Root Test Route - UPDATED for domain
 app.get('/', (req, res) => {
-  res.status(200).send('✅ API is running successfully on Render!');
+  res.status(200).json({
+    success: true,
+    message: '✅ API is running successfully on ecolestpierre.org!',
+    data: {
+      domain: 'ecolestpierre.org',
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0'
+    }
+  });
 });
 
-// 🩺 Health Check
+// ✅ API Root Route
+app.get('/api', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Welcome to École Saint Pierre Claver API',
+    endpoints: {
+      auth: '/api/auth',
+      admin: '/api/admin',
+      messages: '/api/messages',
+      applications: '/api/applications',
+      upload: '/api/upload',
+      health: '/api/health'
+    },
+    documentation: 'https://ecolestpierre.org/api/docs'
+  });
+});
+
+// 🩺 Health Check - UPDATED for domain
 app.get('/api/health', (req, res) => {
-  const dbStatus =
-    mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
 
   res.status(200).json({
     success: true,
     status: 'OK',
-    message: 'Server is running',
+    message: 'Server is running on ecolestpierre.org',
     data: {
+      domain: 'ecolestpierre.org',
       database: dbStatus,
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
       uptime: process.uptime(),
+      memory: process.memoryUsage(),
       allowedOrigins: allowedOrigins
     },
   });
@@ -130,13 +165,14 @@ app.get('/api/health', (req, res) => {
 app.use((err, req, res, next) => {
   console.error('🔥 Error stack:', err.stack);
 
-  // CORS error - don't send full error details in production
+  // CORS error
   if (err.message === 'Not allowed by CORS') {
     return res.status(403).json({
       success: false,
       message: 'CORS error: Origin not allowed',
       ...(process.env.NODE_ENV === 'development' && { 
-        details: `Origin: ${req.get('Origin')}` 
+        details: `Origin: ${req.get('Origin')}`,
+        allowedOrigins: allowedOrigins
       })
     });
   }
@@ -173,9 +209,7 @@ app.use((err, req, res, next) => {
     return res.status(400).json({ success: false, message: 'File too large' });
   }
   if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-    return res
-      .status(400)
-      .json({ success: false, message: 'Unexpected file field' });
+    return res.status(400).json({ success: false, message: 'Unexpected file field' });
   }
 
   // Default Error
@@ -193,6 +227,14 @@ app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
     message: 'Route not found',
+    requestedUrl: req.originalUrl,
+    availableEndpoints: {
+      base: '/api',
+      health: '/api/health',
+      auth: '/api/auth',
+      messages: '/api/messages',
+      applications: '/api/applications'
+    }
   });
 });
 
@@ -201,20 +243,21 @@ app.use('*', (req, res) => {
 // ======================
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ---------------------------------------------------
 ✅ Server running on port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
+🏠 Domain: ecolestpierre.org
 🔗 Allowed Origins:
+   - https://ecolestpierre.org
+   - https://www.ecolestpierre.org
    - http://localhost:3000
    - https://ecole-saint-pierre-claver.vercel.app
    - ${process.env.FRONTEND_URL || '(none)'}
-📦 Database URI: ${
-    process.env.MONGODB_URI
-      ? process.env.MONGODB_URI.replace(/\/\/.*@/, '//<hidden>@')
-      : 'mongodb://127.0.0.1:27017/stpierreclaver'
-  }
+📦 Database: ${process.env.MONGODB_URI ? 'MongoDB Atlas' : 'Local MongoDB'}
 ---------------------------------------------------
   `);
 });
+
+module.exports = app;
